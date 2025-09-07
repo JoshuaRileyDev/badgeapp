@@ -125,14 +125,14 @@ class BadgeApp {
         hiddenBtn.className = 'hidden-button';
         hiddenBtn.style.cssText = `
             position: absolute;
-            top: 20px;
+            top: 40px;
             right: 20px;
-            width: 50px;
-            height: 50px;
+            width: 70px;
+            height: 70px;
             background: transparent;
             cursor: pointer;
             z-index: 1000;
-            border-radius: 50%;
+            border-radius: 0;
             transition: background-color 0.3s ease;
         `;
         

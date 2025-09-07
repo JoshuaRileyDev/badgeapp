@@ -18,6 +18,12 @@
             overscroll-behavior: none;
             margin: 0;
             padding: 0;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
         html {
             min-height: calc(100% + env(safe-area-inset-top));
@@ -28,12 +34,16 @@
             height: 100vh;
             object-fit: cover;
             display: block;
+            pointer-events: none;
+        }
+        
+        * {
             -webkit-touch-callout: none;
             -webkit-user-select: none;
             -moz-user-select: none;
             -ms-user-select: none;
             user-select: none;
-            pointer-events: none;
+            -webkit-tap-highlight-color: transparent;
         }
     </style>
     <link rel="manifest" href="manifest.json">
