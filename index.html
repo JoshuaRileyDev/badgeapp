@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="js/vue.js"></script>
+    <meta name="viewport"
+        content="initial-scale=1, viewport-fit=cover, width=device-width, user-scalable=no, maximum-scale=1.0">
+    </meta>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    </meta>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    </meta>
+    <style>
+        html,
+        body {
+            overscroll-behavior: none;
+            margin: 0;
+            padding: 0;
+        }
+        html {
+            min-height: calc(100% + env(safe-area-inset-top));
+            /* padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); */
+        }
+        .fullscreen-image {
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            display: block;
+        }
+    </style>
+    <link rel="manifest" href="manifest.json">
+    <title>Badge App</title>
+    <script>
+    </script>
+</head>
+
+<body class="m-0 p-0 relative">
+    <img src="images/hs.jpg" alt="Full screen image" class="fullscreen-image">
+    <div class="notification-capsule absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-500 text-white rounded-full px-3 py-1 font-bold text-sm">
+        347
+    </div>
+</body>
+<script defer src="js/index.js"></script>
+</html>
