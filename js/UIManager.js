@@ -16,7 +16,7 @@ class UIManager {
         notification.textContent = `Mode: ${mode}`;
         notification.style.cssText = `
             position: absolute;
-            top: 20px;
+            top: 80px;
             left: 50%;
             transform: translateX(-50%);
             background: rgba(0, 0, 0, 0.8);
@@ -67,9 +67,11 @@ class UIManager {
             height: 100%;
             background: rgba(0, 0, 0, 0.8);
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: center;
+            padding-top: 25vh;
             z-index: 3000;
+            box-sizing: border-box;
         `;
 
         const modal = document.createElement('div');
@@ -175,9 +177,11 @@ class UIManager {
             height: 100%;
             background: rgba(0, 0, 0, 0.8);
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: center;
+            padding-top: 25vh;
             z-index: 3000;
+            box-sizing: border-box;
         `;
 
         const modal = document.createElement('div');
