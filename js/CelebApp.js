@@ -1,0 +1,687 @@
+class CelebApp {
+    constructor() {
+        this.dbName = 'CelebSelfieDB';  // Changed to avoid conflict with old BadgeAppDB
+        this.dbVersion = 1;
+        this.db = null;
+        this.userImage = null;
+        this.recognition = null;
+        this.isListening = false;
+        
+        // MagicApps API configuration
+        this.baseAPI = 'https://api.magicapps.co.uk/api';
+        this.appID = 'c6b356d1-d6b4-4ebb-bae2-4b3ba53d71d3';
+        this.userID = null;
+        this.credits = 0;
+        
+        // Celebrity list for Fuse.js matching
+        this.celebrities = [
+            'Tom Cruise', 'Brad Pitt', 'Leonardo DiCaprio', 'Will Smith', 'Johnny Depp',
+            'Robert Downey Jr', 'Chris Hemsworth', 'Chris Evans', 'Ryan Reynolds', 'Dwayne Johnson',
+            'Scarlett Johansson', 'Jennifer Lawrence', 'Emma Watson', 'Angelina Jolie', 'Margot Robbie',
+            'Gal Gadot', 'Emma Stone', 'Anne Hathaway', 'Natalie Portman', 'Charlize Theron',
+            'Tom Holland', 'Zendaya', 'Timothée Chalamet', 'Florence Pugh', 'Anya Taylor-Joy',
+            'Pedro Pascal', 'Oscar Isaac', 'Michael B Jordan', 'Chadwick Boseman', 'Keanu Reeves',
+            'Taylor Swift', 'Ariana Grande', 'Billie Eilish', 'Harry Styles', 'Drake',
+            'Beyoncé', 'Rihanna', 'Lady Gaga', 'Justin Bieber', 'The Weeknd',
+            'Elon Musk', 'Mark Zuckerberg', 'Bill Gates', 'Jeff Bezos', 'Steve Jobs',
+            'Barack Obama', 'Donald Trump', 'Joe Biden', 'Kamala Harris', 'Bernie Sanders'
+        ];
+        
+        this.init();
+    }
+
+    async init() {
+        // Clean up old databases if they exist
+        await this.cleanupOldDatabases();
+        
+        // Initialize WebAppManager first
+        await this.initWebAppManager();
+        
+        await this.initDB();
+        await this.loadSavedState();
+        await this.loadUserID();
+        if (this.userID) {
+            await this.loadCredits();
+        }
+        this.setupEventListeners();
+        this.initVoiceRecognition();
+        this.createSettingsModal();
+    }
+
+    // Clean up old databases from previous app versions
+    async cleanupOldDatabases() {
+        try {
+            const oldDatabases = ['BadgeAppDB', 'CelebAppDB'];
+            for (const dbName of oldDatabases) {
+                await new Promise((resolve) => {
+                    const deleteRequest = indexedDB.deleteDatabase(dbName);
+                    deleteRequest.onsuccess = () => {
+                        console.log(`Deleted old database: ${dbName}`);
+                        resolve();
+                    };
+                    deleteRequest.onerror = () => {
+                        console.log(`Could not delete database: ${dbName}`);
+                        resolve();
+                    };
+                    deleteRequest.onblocked = () => {
+                        console.log(`Delete blocked for database: ${dbName}`);
+                        resolve();
+                    };
+                });
+            }
+        } catch (error) {
+            console.error('Error cleaning up old databases:', error);
+        }
+    }
+
+    // Initialize WebAppManager for authentication
+    async initWebAppManager() {
+        try {
+            window.webAppManager = new WebAppManager({
+                appID: this.appID,
+                requireHomeScreen: false,
+                splashDuration: 2000
+            });
+            
+            await window.webAppManager.initialize('wam-container');
+            console.log('WebAppManager initialized');
+        } catch (error) {
+            console.error('Failed to initialize WebAppManager:', error);
+        }
+    }
+
+    // Load User ID from localStorage (set by WebAppManager after login)
+    async loadUserID() {
+        try {
+            // Get userID from localStorage (set by WebAppManager after successful login)
+            const userID = localStorage.getItem('userID');
+            
+            if (userID) {
+                this.userID = userID;
+                console.log('User ID loaded from localStorage:', this.userID);
+            } else {
+                console.warn('No user ID found. User may need to log in.');
+            }
+        } catch (error) {
+            console.error('Error loading user ID:', error);
+        }
+    }
+
+    // Load credits from MagicApps API
+    async loadCredits() {
+        if (!this.userID) return;
+
+        try {
+            const response = await fetch(`${this.baseAPI}/ai-credits/balance`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    userID: this.userID,
+                    appID: this.appID
+                })
+            });
+
+            const data = await response.json();
+            
+            if (data.type === 'success') {
+                this.credits = data.credits;
+                this.updateCreditsDisplay();
+            } else {
+                console.error('Failed to load credits:', data.message);
+            }
+        } catch (error) {
+            console.error('Error loading credits:', error);
+        }
+    }
+
+    // Update credits display in settings modal
+    updateCreditsDisplay() {
+        const creditsDisplay = document.getElementById('creditsDisplay');
+        if (creditsDisplay) {
+            creditsDisplay.textContent = this.credits;
+        }
+    }
+
+    // IndexedDB Setup
+    initDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, this.dbVersion);
+            
+            request.onerror = () => reject(request.error);
+            
+            request.onsuccess = () => {
+                this.db = request.result;
+                resolve();
+            };
+            
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                
+                if (!db.objectStoreNames.contains('settings')) {
+                    db.createObjectStore('settings');
+                }
+                
+                if (!db.objectStoreNames.contains('homeScreenImage')) {
+                    db.createObjectStore('homeScreenImage');
+                }
+            };
+        });
+    }
+
+    // Load saved state from IndexedDB
+    async loadSavedState() {
+        try {
+            const savedUserImage = await this.getFromDB('settings', 'userImage');
+            if (savedUserImage) {
+                this.userImage = savedUserImage;
+            }
+
+            const imageData = await this.getFromDB('homeScreenImage', 'image');
+            if (imageData) {
+                const img = document.querySelector('.fullscreen-image');
+                if (img) {
+                    img.src = imageData;
+                }
+            }
+        } catch (error) {
+            console.error('Error loading saved state:', error);
+        }
+    }
+
+    // IndexedDB helper functions
+    saveToDB(storeName, key, data) {
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([storeName], 'readwrite');
+            const store = transaction.objectStore(storeName);
+            const request = store.put(data, key);
+            
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    getFromDB(storeName, key) {
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([storeName], 'readonly');
+            const store = transaction.objectStore(storeName);
+            const request = store.get(key);
+            
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // Setup event listeners
+    setupEventListeners() {
+        const settingsBtn = document.getElementById('settingsBtn');
+        settingsBtn.addEventListener('click', () => {
+            this.openSettingsModal();
+        });
+
+        const homescreen = document.getElementById('homescreen');
+        homescreen.addEventListener('click', (e) => {
+            this.handleHomescreenTap(e);
+        });
+    }
+
+    // Initialize voice recognition
+    initVoiceRecognition() {
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            this.recognition = new SpeechRecognition();
+            this.recognition.continuous = false;
+            this.recognition.interimResults = false;
+            this.recognition.lang = 'en-US';
+
+            this.recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                console.log('Voice input:', transcript);
+                this.processCelebrityName(transcript);
+            };
+
+            this.recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                this.isListening = false;
+                this.hideBlackOverlay();
+            };
+
+            this.recognition.onend = () => {
+                this.isListening = false;
+            };
+        } else {
+            console.warn('Speech recognition not supported in this browser');
+        }
+    }
+
+    // Handle homescreen tap
+    handleHomescreenTap(e) {
+        // Create ripple effect
+        this.createRipple(e.clientX, e.clientY);
+
+        // Show black overlay and start listening
+        this.showBlackOverlay();
+        this.startListening();
+    }
+
+    // Create ripple animation
+    createRipple(x, y) {
+        const ripple = document.createElement('div');
+        ripple.className = 'tap-ripple';
+        ripple.style.left = (x - 50) + 'px';
+        ripple.style.top = (y - 50) + 'px';
+        document.body.appendChild(ripple);
+
+        setTimeout(() => {
+            ripple.remove();
+        }, 600);
+    }
+
+    // Show black overlay
+    showBlackOverlay() {
+        const overlay = document.getElementById('blackOverlay');
+        overlay.classList.add('active');
+    }
+
+    // Hide black overlay
+    hideBlackOverlay() {
+        const overlay = document.getElementById('blackOverlay');
+        overlay.classList.remove('active');
+    }
+
+    // Start voice listening
+    startListening() {
+        if (this.recognition && !this.isListening) {
+            this.isListening = true;
+            this.recognition.start();
+            console.log('Listening for celebrity name...');
+        }
+    }
+
+    // Process celebrity name using Fuse.js
+    processCelebrityName(input) {
+        const fuse = new Fuse(this.celebrities, {
+            includeScore: true,
+            threshold: 0.4
+        });
+
+        const results = fuse.search(input);
+        
+        if (results.length > 0) {
+            const matchedCelebrity = results[0].item;
+            console.log('Matched celebrity:', matchedCelebrity);
+            this.generateSelfie(matchedCelebrity);
+        } else {
+            console.log('No celebrity match found for:', input);
+            this.hideBlackOverlay();
+        }
+    }
+
+    // Generate selfie using MagicApps Replicate API
+    async generateSelfie(celebrityName) {
+        if (!this.userID) {
+            alert('Please set your User ID in settings');
+            this.hideBlackOverlay();
+            return;
+        }
+
+        if (!this.userImage) {
+            alert('Please upload your image in settings');
+            this.hideBlackOverlay();
+            return;
+        }
+
+        if (this.credits < 1) {
+            alert('Insufficient credits. Please purchase more credits.');
+            this.hideBlackOverlay();
+            return;
+        }
+
+        try {
+            console.log('Generating selfie with', celebrityName);
+            
+            // Show loading message on overlay
+            this.showLoadingMessage('Generating selfie...');
+
+            // Call MagicApps API which handles Replicate
+            const response = await fetch(`${this.baseAPI}/ai/replicate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    userID: this.userID,
+                    appID: this.appID,
+                    model: 'fofr/face-to-many',
+                    input: {
+                        image: this.userImage,
+                        prompt: `a selfie photo with ${celebrityName}, professional photography, high quality, realistic`,
+                        negative_prompt: 'cartoon, anime, painting, illustration, low quality, blurry',
+                        num_outputs: 1
+                    },
+                    creditCost: 1
+                })
+            });
+
+            const data = await response.json();
+            
+            if (data.type === 'success') {
+                // Update credits
+                this.credits = data.credits_remaining;
+                this.updateCreditsDisplay();
+                
+                // Display the generated image
+                const imageUrl = data.output[0];
+                this.displayGeneratedImage(imageUrl);
+            } else {
+                throw new Error(data.message || 'Failed to generate image');
+            }
+
+        } catch (error) {
+            console.error('Error generating selfie:', error);
+            alert('Error generating image: ' + error.message);
+            this.hideBlackOverlay();
+        }
+    }
+
+    // Display generated image
+    displayGeneratedImage(imageUrl) {
+        this.hideLoadingMessage();
+        
+        const img = document.createElement('img');
+        img.className = 'generated-image';
+        img.src = imageUrl;
+        
+        const overlay = document.getElementById('blackOverlay');
+        overlay.appendChild(img);
+
+        // Trigger animation
+        setTimeout(() => {
+            img.classList.add('show');
+        }, 10);
+
+        // Close on click
+        overlay.addEventListener('click', () => {
+            img.classList.remove('show');
+            setTimeout(() => {
+                img.remove();
+                this.hideBlackOverlay();
+            }, 400);
+        }, { once: true });
+    }
+
+    // Show loading message
+    showLoadingMessage(message) {
+        const existing = document.querySelector('.loading-message');
+        if (existing) {
+            existing.remove();
+        }
+
+        const loadingDiv = document.createElement('div');
+        loadingDiv.className = 'loading-message';
+        loadingDiv.textContent = message;
+        loadingDiv.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 1001;
+            text-align: center;
+        `;
+
+        const overlay = document.getElementById('blackOverlay');
+        overlay.appendChild(loadingDiv);
+    }
+
+    // Hide loading message
+    hideLoadingMessage() {
+        const loadingDiv = document.querySelector('.loading-message');
+        if (loadingDiv) {
+            loadingDiv.remove();
+        }
+    }
+
+    // Create settings modal
+    createSettingsModal() {
+        const modal = document.createElement('div');
+        modal.id = 'settingsModal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 5000;
+            overflow-y: auto;
+        `;
+
+        const content = document.createElement('div');
+        content.style.cssText = `
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            width: 90%;
+            max-width: 400px;
+            max-height: 90vh;
+            overflow-y: auto;
+        `;
+
+        const title = document.createElement('h2');
+        title.textContent = 'Settings';
+        title.style.cssText = 'margin: 0 0 20px 0; font-size: 24px; font-weight: bold;';
+
+        // Credits display
+        const creditsContainer = document.createElement('div');
+        creditsContainer.style.cssText = `
+            background: #f0f0f0;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+        `;
+
+        const creditsLabel = document.createElement('p');
+        creditsLabel.textContent = 'Your Credits';
+        creditsLabel.style.cssText = 'margin: 0 0 5px 0; color: #666; font-size: 14px;';
+
+        const creditsDisplay = document.createElement('p');
+        creditsDisplay.id = 'creditsDisplay';
+        creditsDisplay.textContent = this.credits;
+        creditsDisplay.style.cssText = 'margin: 0; font-size: 32px; font-weight: bold; color: #007AFF;';
+
+        creditsContainer.appendChild(creditsLabel);
+        creditsContainer.appendChild(creditsDisplay);
+
+        // User info display (read-only)
+        const userInfoLabel = document.createElement('label');
+        userInfoLabel.textContent = 'User Info';
+        userInfoLabel.style.cssText = 'display: block; margin-bottom: 5px; font-weight: 500;';
+
+        const userInfoDisplay = document.createElement('div');
+        const userName = localStorage.getItem('fullName') || 'User';
+        const userEmail = localStorage.getItem('email') || '';
+        userInfoDisplay.innerHTML = `
+            <div style="padding: 12px; background: #f0f0f0; border-radius: 8px; margin-bottom: 10px;">
+                <div style="font-weight: 600; margin-bottom: 4px;">${userName}</div>
+                <div style="font-size: 14px; color: #666;">${userEmail}</div>
+                <div style="font-size: 12px; color: #999; margin-top: 4px;">ID: ${this.userID || 'Not authenticated'}</div>
+            </div>
+        `;
+        userInfoDisplay.style.cssText = 'margin-bottom: 20px;';
+
+        // Logout button
+        const logoutBtn = document.createElement('button');
+        logoutBtn.textContent = 'Logout';
+        logoutBtn.style.cssText = `
+            width: 100%;
+            padding: 12px;
+            background: #FF3B30;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 20px;
+        `;
+
+        logoutBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to logout?')) {
+                localStorage.removeItem('email');
+                localStorage.removeItem('userID');
+                localStorage.removeItem('fullName');
+                window.location.reload();
+            }
+        });
+
+        // Image upload
+        const imageLabel = document.createElement('label');
+        imageLabel.textContent = 'Your Image';
+        imageLabel.style.cssText = 'display: block; margin-bottom: 5px; font-weight: 500;';
+
+        const imageUpload = document.createElement('input');
+        imageUpload.type = 'file';
+        imageUpload.accept = 'image/*';
+        imageUpload.style.cssText = `
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        `;
+
+        // Homescreen image upload
+        const homescreenLabel = document.createElement('label');
+        homescreenLabel.textContent = 'Homescreen Background';
+        homescreenLabel.style.cssText = 'display: block; margin-bottom: 5px; font-weight: 500;';
+
+        const homescreenUpload = document.createElement('input');
+        homescreenUpload.type = 'file';
+        homescreenUpload.accept = 'image/*';
+        homescreenUpload.style.cssText = `
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        `;
+
+        // Save button
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = 'Save';
+        saveBtn.style.cssText = `
+            width: 100%;
+            padding: 15px;
+            background: #007AFF;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 10px;
+        `;
+
+        // Refresh credits button
+        const refreshBtn = document.createElement('button');
+        refreshBtn.textContent = 'Refresh Credits';
+        refreshBtn.style.cssText = `
+            width: 100%;
+            padding: 12px;
+            background: #34C759;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        `;
+
+        saveBtn.addEventListener('click', async () => {
+            this.closeSettingsModal();
+        });
+
+        refreshBtn.addEventListener('click', async () => {
+            await this.loadCredits();
+        });
+
+        imageUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    this.userImage = event.target.result;
+                    await this.saveToDB('settings', 'userImage', this.userImage);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        homescreenUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    const imageData = event.target.result;
+                    const img = document.querySelector('.fullscreen-image');
+                    img.src = imageData;
+                    await this.saveToDB('homeScreenImage', 'image', imageData);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        content.appendChild(title);
+        content.appendChild(creditsContainer);
+        content.appendChild(userInfoLabel);
+        content.appendChild(userInfoDisplay);
+        content.appendChild(logoutBtn);
+        content.appendChild(imageLabel);
+        content.appendChild(imageUpload);
+        content.appendChild(homescreenLabel);
+        content.appendChild(homescreenUpload);
+        content.appendChild(saveBtn);
+        content.appendChild(refreshBtn);
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+
+        // Close on background click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                this.closeSettingsModal();
+            }
+        });
+    }
+
+    // Open settings modal
+    async openSettingsModal() {
+        const modal = document.getElementById('settingsModal');
+        modal.style.display = 'flex';
+        
+        // Refresh credits when opening settings
+        if (this.userID) {
+            await this.loadCredits();
+        }
+    }
+
+    // Close settings modal
+    closeSettingsModal() {
+        const modal = document.getElementById('settingsModal');
+        modal.style.display = 'none';
+    }
+}
+
+// Initialize the app when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    new CelebApp();
+});

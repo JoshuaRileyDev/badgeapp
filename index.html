@@ -4,7 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="js/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+    <script src="js/WebAppManager.js"></script>
     <meta name="viewport"
         content="initial-scale=1, viewport-fit=cover, width=device-width, user-scalable=no, maximum-scale=1.0">
     </meta>
@@ -27,14 +28,12 @@
         }
         html {
             min-height: calc(100% + env(safe-area-inset-top));
-            /* padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); */
         }
         .fullscreen-image {
             width: 100vw;
             height: 100vh;
             object-fit: cover;
             display: block;
-            pointer-events: none;
         }
         
         * {
@@ -45,21 +44,89 @@
             user-select: none;
             -webkit-tap-highlight-color: transparent;
         }
+
+        .black-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: black;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .black-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .settings-button {
+            position: fixed;
+            top: env(safe-area-inset-top, 20px);
+            left: 20px;
+            width: 60px;
+            height: 60px;
+            background: transparent;
+            z-index: 10;
+            cursor: pointer;
+        }
+
+        .generated-image {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            max-width: 90vw;
+            max-height: 90vh;
+            border-radius: 15px;
+            z-index: 1001;
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .generated-image.show {
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        @keyframes ripple {
+            0% {
+                transform: scale(0.8);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(2);
+                opacity: 0;
+            }
+        }
+
+        .tap-ripple {
+            position: fixed;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            pointer-events: none;
+            animation: ripple 0.6s ease-out;
+            z-index: 999;
+        }
+
+        #app-container {
+        }
     </style>
     <link rel="manifest" href="manifest.json">
-    <title>Notix</title>
-    <script>
-    </script>
+    <title>Celebrity Selfie</title>
 </head>
 
 <body class="m-0 p-0 relative">
-    <img src="images/hs.jpg" alt="Full screen image" class="fullscreen-image">
-    <div class="notification-capsule absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-500 text-white rounded-full px-3 py-1 font-bold text-sm">
-        347
+    <div id="wam-container">
+            <img src="images/hs.jpg" alt="Full screen image" class="fullscreen-image" id="homescreen">
+            <div class="settings-button" id="settingsBtn"></div>
+            <div class="black-overlay" id="blackOverlay"></div>
+        
+        
     </div>
 </body>
-<script defer src="js/DatabaseManager.js"></script>
-<script defer src="js/CardParser.js"></script>
-<script defer src="js/UIManager.js"></script>
-<script defer src="js/BadgeApp.js"></script>
+<script defer src="js/CelebApp.js"></script>
 </html>

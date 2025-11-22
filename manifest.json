@@ -1,15 +1,15 @@
 {
-    "name": "Atomic Deck",
-    "short_name": "Atomic Deck",
+    "name": "Celebrity Selfie",
+    "short_name": "CelebSelfie",
     "start_url": "index.html",
     "display": "standalone",
-    "background_color": "#ffffff",
-    "theme_color": "#ffffff",
+    "background_color": "#000000",
+    "theme_color": "#000000",
     "icons": [
         {
-            "src": "icons/badgeicon.png",
+            "src": "icons/celebselfie.png",
             "sizes": "512x512",
             "type": "image/png"
         }
     ]
-} 
+}
