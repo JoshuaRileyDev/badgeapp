@@ -491,9 +491,11 @@ class CelebApp {
                 this.credits = data.credits_remaining;
                 this.updateCreditsDisplay();
                 
-                // Display the generated image
-                const imageUrl = data.output[0];
-                this.displayGeneratedImage(imageUrl);
+                this.debugLog(`✅ Image generated! Credits used: ${data.credits_used}`, 'success');
+                this.debugLog(`Credits remaining: ${data.credits_remaining}`, 'info');
+                
+                // Download and display the generated image
+                await this.downloadAndDisplayImage(data.image, celebrityName);
             } else {
                 throw new Error(data.message || 'Failed to generate image');
             }
@@ -505,8 +507,37 @@ class CelebApp {
         }
     }
 
+    // Download image from URL and display it
+    async downloadAndDisplayImage(imageUrl, celebrityName) {
+        try {
+            this.showLoadingMessage('Downloading image...');
+            this.debugLog('📥 Downloading image from Replicate...', 'info');
+            
+            // Fetch the image
+            const response = await fetch(imageUrl);
+            if (!response.ok) {
+                throw new Error('Failed to download image');
+            }
+            
+            const blob = await response.blob();
+            const localUrl = URL.createObjectURL(blob);
+            
+            this.debugLog('✅ Image downloaded successfully', 'success');
+            
+            // Display the image
+            this.displayGeneratedImage(localUrl, celebrityName, blob);
+            
+        } catch (error) {
+            console.error('Error downloading image:', error);
+            this.debugLog(`❌ Download failed: ${error.message}`, 'error');
+            this.hideLoadingMessage();
+            alert('Failed to download generated image');
+            this.hideBlackOverlay();
+        }
+    }
+
     // Display generated image
-    displayGeneratedImage(imageUrl) {
+    displayGeneratedImage(imageUrl, celebrityName, blob) {
         this.hideLoadingMessage();
         
         const img = document.createElement('img');
@@ -516,18 +547,54 @@ class CelebApp {
         const overlay = document.getElementById('blackOverlay');
         overlay.appendChild(img);
 
+        // Add download button
+        const downloadBtn = document.createElement('button');
+        downloadBtn.textContent = `💾 Save Selfie with ${celebrityName}`;
+        downloadBtn.style.cssText = `
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 30px;
+            background: #007AFF;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 1002;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        `;
+        
+        downloadBtn.addEventListener('click', () => {
+            const a = document.createElement('a');
+            a.href = imageUrl;
+            a.download = `selfie-with-${celebrityName.replace(/\s+/g, '-').toLowerCase()}.jpg`;
+            a.click();
+        });
+        
+        overlay.appendChild(downloadBtn);
+
         // Trigger animation
         setTimeout(() => {
             img.classList.add('show');
         }, 10);
 
-        // Close on click
-        overlay.addEventListener('click', () => {
-            img.classList.remove('show');
-            setTimeout(() => {
-                img.remove();
-                this.hideBlackOverlay();
-            }, 400);
+        // Close on click (but not on button)
+        overlay.addEventListener('click', (e) => {
+            if (e.target !== downloadBtn) {
+                img.classList.remove('show');
+                setTimeout(() => {
+                    img.remove();
+                    downloadBtn.remove();
+                    this.hideBlackOverlay();
+                    // Clean up object URL
+                    if (blob) {
+                        URL.revokeObjectURL(imageUrl);
+                    }
+                }, 400);
+            }
         }, { once: true });
     }
 
