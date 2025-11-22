@@ -6,6 +6,7 @@ class CelebApp {
         this.userImage = null;
         this.recognition = null;
         this.isListening = false;
+        this.debugMode = false;  // Debug mode toggle
         
         // MagicApps API configuration
         this.baseAPI = 'https://api.magicapps.co.uk/api';
@@ -46,6 +47,8 @@ class CelebApp {
         this.setupEventListeners();
         this.initVoiceRecognition();
         this.createSettingsModal();
+        this.createDebugOverlay();
+        await this.loadDebugMode();
     }
 
     // Clean up old databases from previous app versions
@@ -244,26 +247,43 @@ class CelebApp {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             this.recognition = new SpeechRecognition();
             this.recognition.continuous = false;
-            this.recognition.interimResults = false;
+            this.recognition.interimResults = true;  // Enable interim results for debug mode
             this.recognition.lang = 'en-US';
+
+            this.recognition.onstart = () => {
+                this.debugLog('Voice recognition started', 'info');
+            };
 
             this.recognition.onresult = (event) => {
                 const transcript = event.results[0][0].transcript;
+                const isFinal = event.results[0].isFinal;
+                
                 console.log('Voice input:', transcript);
-                this.processCelebrityName(transcript);
+                
+                if (this.debugMode) {
+                    this.debugLog(`Transcript (${isFinal ? 'final' : 'interim'}): ${transcript}`, 'transcript');
+                }
+                
+                if (isFinal) {
+                    this.processCelebrityName(transcript);
+                }
             };
 
             this.recognition.onerror = (event) => {
                 console.error('Speech recognition error:', event.error);
+                this.debugLog(`Error: ${event.error}`, 'error');
                 this.isListening = false;
                 this.hideBlackOverlay();
             };
 
             this.recognition.onend = () => {
                 this.isListening = false;
+                this.debugLog('Voice recognition ended', 'info');
             };
         } else {
-            console.warn('Speech recognition not supported in this browser');
+            const errorMsg = 'Speech recognition not supported in this browser';
+            console.warn(errorMsg);
+            this.debugLog(errorMsg, 'error');
         }
     }
 
@@ -313,6 +333,8 @@ class CelebApp {
 
     // Process celebrity name using Fuse.js
     processCelebrityName(input) {
+        this.debugLog(`Processing input: "${input}"`, 'info');
+        
         const fuse = new Fuse(this.celebrities, {
             includeScore: true,
             threshold: 0.4
@@ -322,10 +344,13 @@ class CelebApp {
         
         if (results.length > 0) {
             const matchedCelebrity = results[0].item;
+            const matchScore = results[0].score;
             console.log('Matched celebrity:', matchedCelebrity);
+            this.debugLog(`Match found: ${matchedCelebrity} (score: ${matchScore.toFixed(3)})`, 'success');
             this.generateSelfie(matchedCelebrity);
         } else {
             console.log('No celebrity match found for:', input);
+            this.debugLog(`No match found for: "${input}"`, 'error');
             this.hideBlackOverlay();
         }
     }
@@ -653,11 +678,52 @@ class CelebApp {
             }
         });
 
+        // Debug mode toggle
+        const debugLabel = document.createElement('label');
+        debugLabel.textContent = 'Debug Mode';
+        debugLabel.style.cssText = 'display: block; margin-bottom: 10px; margin-top: 10px; font-weight: 500;';
+
+        const debugToggleContainer = document.createElement('div');
+        debugToggleContainer.style.cssText = `
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            background: #f0f0f0;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        `;
+
+        const debugText = document.createElement('span');
+        debugText.textContent = 'Show voice recognition debug info';
+        debugText.style.cssText = 'font-size: 14px;';
+
+        const debugToggle = document.createElement('input');
+        debugToggle.type = 'checkbox';
+        debugToggle.id = 'debugToggle';
+        debugToggle.checked = this.debugMode;
+        debugToggle.style.cssText = `
+            width: 40px;
+            height: 20px;
+            cursor: pointer;
+        `;
+
+        debugToggle.addEventListener('change', async (e) => {
+            this.debugMode = e.target.checked;
+            await this.saveToDB('settings', 'debugMode', this.debugMode);
+            this.toggleDebugOverlay(this.debugMode);
+        });
+
+        debugToggleContainer.appendChild(debugText);
+        debugToggleContainer.appendChild(debugToggle);
+
         content.appendChild(title);
         content.appendChild(creditsContainer);
         content.appendChild(userInfoLabel);
         content.appendChild(userInfoDisplay);
         content.appendChild(logoutBtn);
+        content.appendChild(debugLabel);
+        content.appendChild(debugToggleContainer);
         content.appendChild(imageLabel);
         content.appendChild(imageUpload);
         content.appendChild(homescreenLabel);
@@ -690,6 +756,117 @@ class CelebApp {
     closeSettingsModal() {
         const modal = document.getElementById('settingsModal');
         modal.style.display = 'none';
+    }
+
+    // Load debug mode from storage
+    async loadDebugMode() {
+        try {
+            const savedDebugMode = await this.getFromDB('settings', 'debugMode');
+            if (savedDebugMode !== undefined) {
+                this.debugMode = savedDebugMode;
+                this.toggleDebugOverlay(this.debugMode);
+            }
+        } catch (error) {
+            console.error('Error loading debug mode:', error);
+        }
+    }
+
+    // Create debug overlay
+    createDebugOverlay() {
+        const overlay = document.createElement('div');
+        overlay.id = 'debugOverlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 100px;
+            right: 20px;
+            width: 300px;
+            max-height: 400px;
+            background: rgba(0, 0, 0, 0.9);
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            z-index: 9999;
+            display: none;
+            overflow-y: auto;
+            border: 2px solid #00ff00;
+        `;
+
+        const title = document.createElement('div');
+        title.textContent = '🎤 Voice Debug';
+        title.style.cssText = `
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 14px;
+            border-bottom: 1px solid #00ff00;
+            padding-bottom: 5px;
+        `;
+
+        const logContainer = document.createElement('div');
+        logContainer.id = 'debugLog';
+        logContainer.style.cssText = 'line-height: 1.4;';
+
+        overlay.appendChild(title);
+        overlay.appendChild(logContainer);
+        document.body.appendChild(overlay);
+    }
+
+    // Toggle debug overlay visibility
+    toggleDebugOverlay(show) {
+        const overlay = document.getElementById('debugOverlay');
+        if (overlay) {
+            overlay.style.display = show ? 'block' : 'none';
+            if (show) {
+                this.debugLog('Debug mode enabled', 'info');
+            } else {
+                // Clear log when hiding
+                const logContainer = document.getElementById('debugLog');
+                if (logContainer) {
+                    logContainer.innerHTML = '';
+                }
+            }
+        }
+    }
+
+    // Log debug message
+    debugLog(message, type = 'info') {
+        if (!this.debugMode) return;
+
+        const logContainer = document.getElementById('debugLog');
+        if (!logContainer) return;
+
+        const timestamp = new Date().toLocaleTimeString();
+        const logEntry = document.createElement('div');
+        logEntry.style.cssText = 'margin-bottom: 8px; padding: 5px; border-left: 3px solid ';
+        
+        switch(type) {
+            case 'error':
+                logEntry.style.borderLeftColor = '#ff0000';
+                logEntry.style.color = '#ff6666';
+                break;
+            case 'transcript':
+                logEntry.style.borderLeftColor = '#00ffff';
+                logEntry.style.color = '#00ffff';
+                break;
+            case 'success':
+                logEntry.style.borderLeftColor = '#00ff00';
+                logEntry.style.color = '#00ff00';
+                break;
+            default:
+                logEntry.style.borderLeftColor = '#888888';
+                logEntry.style.color = '#cccccc';
+        }
+
+        logEntry.innerHTML = `<span style="color: #666;">${timestamp}</span><br>${message}`;
+        
+        // Add to top of log
+        logContainer.insertBefore(logEntry, logContainer.firstChild);
+
+        // Keep only last 20 entries
+        while (logContainer.children.length > 20) {
+            logContainer.removeChild(logContainer.lastChild);
+        }
     }
 }
 
