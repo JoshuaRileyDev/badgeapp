@@ -188,7 +188,8 @@ class CelebApp {
         try {
             const savedUserImage = await this.getFromDB('settings', 'userImage');
             if (savedUserImage) {
-                this.userImage = savedUserImage;
+                // Convert base64 to File object
+                this.userImage = await this.base64ToFile(savedUserImage, 'user-image.jpg');
             }
 
             const imageData = await this.getFromDB('homeScreenImage', 'image');
@@ -200,6 +201,18 @@ class CelebApp {
             }
         } catch (error) {
             console.error('Error loading saved state:', error);
+        }
+    }
+
+    // Convert base64 string to File object
+    async base64ToFile(base64String, filename) {
+        try {
+            const response = await fetch(base64String);
+            const blob = await response.blob();
+            return new File([blob], filename, { type: blob.type });
+        } catch (error) {
+            console.error('Error converting base64 to file:', error);
+            return null;
         }
     }
 
@@ -433,7 +446,7 @@ class CelebApp {
         }
 
         if (!this.userImage || !(this.userImage instanceof File)) {
-            alert('Please upload your image in settings (image needs to be selected each session)');
+            alert('Please upload your image in settings');
             this.hideBlackOverlay();
             return;
         }
@@ -728,10 +741,10 @@ class CelebApp {
                 // Store the file object directly
                 this.userImage = file;
                 
-                // Also save as base64 for preview/persistence
+                // Save as base64 for persistence
                 const reader = new FileReader();
                 reader.onload = async (event) => {
-                    await this.saveToDB('settings', 'userImagePreview', event.target.result);
+                    await this.saveToDB('settings', 'userImage', event.target.result);
                 };
                 reader.readAsDataURL(file);
             }
