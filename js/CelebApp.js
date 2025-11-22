@@ -127,15 +127,13 @@ class CelebApp {
         if (!this.userID) return;
 
         try {
+            const formData = new FormData();
+            formData.append('userID', this.userID);
+            formData.append('appID', this.appID);
+
             const response = await fetch(`${this.baseAPI}/ai-credits/balance`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    userID: this.userID,
-                    appID: this.appID
-                })
+                body: formData
             });
 
             const data = await response.json();
@@ -453,23 +451,21 @@ class CelebApp {
             this.showLoadingMessage('Generating selfie...');
 
             // Call MagicApps API which handles Replicate
+            const formData = new FormData();
+            formData.append('userID', this.userID);
+            formData.append('appID', this.appID);
+            formData.append('model', 'fofr/face-to-many');
+            formData.append('input', JSON.stringify({
+                image: this.userImage,
+                prompt: `a selfie photo with ${celebrityName}, professional photography, high quality, realistic`,
+                negative_prompt: 'cartoon, anime, painting, illustration, low quality, blurry',
+                num_outputs: 1
+            }));
+            formData.append('creditCost', '1');
+
             const response = await fetch(`${this.baseAPI}/ai/replicate`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    userID: this.userID,
-                    appID: this.appID,
-                    model: 'fofr/face-to-many',
-                    input: {
-                        image: this.userImage,
-                        prompt: `a selfie photo with ${celebrityName}, professional photography, high quality, realistic`,
-                        negative_prompt: 'cartoon, anime, painting, illustration, low quality, blurry',
-                        num_outputs: 1
-                    },
-                    creditCost: 1
-                })
+                body: formData
             });
 
             const data = await response.json();
