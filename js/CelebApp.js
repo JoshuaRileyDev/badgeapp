@@ -472,17 +472,10 @@ class CelebApp {
             const formData = new FormData();
             formData.append('userID', this.userID);
             formData.append('appID', this.appID);
-            formData.append('model', 'fofr/face-to-many');
+            formData.append('prompt', `a selfie photo with ${celebrityName}, professional photography, high quality, realistic`);
             
-            // Add the user image to the images array
+            // Add the user image to the images array (optional for Gemini)
             formData.append('images', this.userImage, this.userImage.name);
-            
-            formData.append('input', JSON.stringify({
-                prompt: `a selfie photo with ${celebrityName}, professional photography, high quality, realistic`,
-                negative_prompt: 'cartoon, anime, painting, illustration, low quality, blurry',
-                num_outputs: 1
-            }));
-            formData.append('creditCost', '1');
 
             const response = await fetch(`${this.baseAPI}/ai/replicate`, {
                 method: 'POST',
