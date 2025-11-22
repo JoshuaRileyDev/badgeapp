@@ -432,8 +432,8 @@ class CelebApp {
             return;
         }
 
-        if (!this.userImage) {
-            alert('Please upload your image in settings');
+        if (!this.userImage || !(this.userImage instanceof File)) {
+            alert('Please upload your image in settings (image needs to be selected each session)');
             this.hideBlackOverlay();
             return;
         }
@@ -455,8 +455,11 @@ class CelebApp {
             formData.append('userID', this.userID);
             formData.append('appID', this.appID);
             formData.append('model', 'fofr/face-to-many');
+            
+            // Add the user image to the images array
+            formData.append('images', this.userImage, this.userImage.name);
+            
             formData.append('input', JSON.stringify({
-                image: this.userImage,
                 prompt: `a selfie photo with ${celebrityName}, professional photography, high quality, realistic`,
                 negative_prompt: 'cartoon, anime, painting, illustration, low quality, blurry',
                 num_outputs: 1
@@ -722,10 +725,13 @@ class CelebApp {
         imageUpload.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
+                // Store the file object directly
+                this.userImage = file;
+                
+                // Also save as base64 for preview/persistence
                 const reader = new FileReader();
                 reader.onload = async (event) => {
-                    this.userImage = event.target.result;
-                    await this.saveToDB('settings', 'userImage', this.userImage);
+                    await this.saveToDB('settings', 'userImagePreview', event.target.result);
                 };
                 reader.readAsDataURL(file);
             }
