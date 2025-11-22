@@ -249,20 +249,29 @@ class CelebApp {
             this.recognition.continuous = false;
             this.recognition.interimResults = true;  // Enable interim results for debug mode
             this.recognition.lang = 'en-US';
+            
+            console.log('Voice recognition initialized:', {
+                continuous: this.recognition.continuous,
+                interimResults: this.recognition.interimResults,
+                lang: this.recognition.lang
+            });
 
             this.recognition.onstart = () => {
-                this.debugLog('Voice recognition started', 'info');
+                this.debugLog('✅ Voice recognition started successfully', 'success');
+                this.debugLog(`Settings: interimResults=${this.recognition.interimResults}, lang=${this.recognition.lang}`, 'info');
             };
 
             this.recognition.onresult = (event) => {
-                const transcript = event.results[0][0].transcript;
-                const isFinal = event.results[0].isFinal;
+                // Get the last result (most recent)
+                const lastResultIndex = event.results.length - 1;
+                const transcript = event.results[lastResultIndex][0].transcript;
+                const isFinal = event.results[lastResultIndex].isFinal;
+                const confidence = event.results[lastResultIndex][0].confidence;
                 
-                console.log('Voice input:', transcript);
+                console.log('Voice input:', transcript, 'isFinal:', isFinal, 'confidence:', confidence);
                 
-                if (this.debugMode) {
-                    this.debugLog(`Transcript (${isFinal ? 'final' : 'interim'}): ${transcript}`, 'transcript');
-                }
+                // Always log if debug mode is enabled (check at runtime)
+                this.debugLog(`${isFinal ? '✓ FINAL' : '⋯ interim'}: "${transcript}" (confidence: ${(confidence * 100).toFixed(1)}%)`, 'transcript');
                 
                 if (isFinal) {
                     this.processCelebrityName(transcript);
@@ -326,8 +335,19 @@ class CelebApp {
     startListening() {
         if (this.recognition && !this.isListening) {
             this.isListening = true;
-            this.recognition.start();
-            console.log('Listening for celebrity name...');
+            try {
+                this.recognition.start();
+                console.log('Listening for celebrity name...');
+                this.debugLog('🎤 Microphone activated - speak now!', 'info');
+            } catch (error) {
+                console.error('Failed to start recognition:', error);
+                this.debugLog(`Failed to start: ${error.message}`, 'error');
+                this.isListening = false;
+            }
+        } else if (!this.recognition) {
+            this.debugLog('Voice recognition not supported', 'error');
+        } else if (this.isListening) {
+            this.debugLog('Already listening...', 'info');
         }
     }
 
@@ -831,6 +851,10 @@ class CelebApp {
 
     // Log debug message
     debugLog(message, type = 'info') {
+        // Always log to console for debugging
+        console.log(`[Debug ${type}]`, message);
+        
+        // Only show in overlay if debug mode is enabled
         if (!this.debugMode) return;
 
         const logContainer = document.getElementById('debugLog');
