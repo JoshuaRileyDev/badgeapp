@@ -85,8 +85,20 @@ class CelebApp {
             
             await window.webAppManager.initialize('wam-container');
             console.log('WebAppManager initialized');
+            
+            // Show app content after successful verification
+            this.showAppContent();
         } catch (error) {
             console.error('Failed to initialize WebAppManager:', error);
+        }
+    }
+
+    // Show app content after verification
+    showAppContent() {
+        const appContent = document.getElementById('appContent');
+        if (appContent) {
+            appContent.classList.add('verified');
+            console.log('App content now visible');
         }
     }
 

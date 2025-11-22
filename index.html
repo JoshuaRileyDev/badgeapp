@@ -25,9 +25,19 @@
             -ms-user-select: none;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
+            background-color: #0f0f0f; /* Match WebAppManager background */
         }
         html {
             min-height: calc(100% + env(safe-area-inset-top));
+        }
+        
+        /* Hide app content until verified */
+        .app-content {
+            display: none;
+        }
+        
+        .app-content.verified {
+            display: block;
         }
         .fullscreen-image {
             width: 100vw;
@@ -121,11 +131,11 @@
 
 <body class="m-0 p-0 relative">
     <div id="wam-container">
+        <div class="app-content" id="appContent">
             <img src="images/hs.jpg" alt="Full screen image" class="fullscreen-image" id="homescreen">
             <div class="settings-button" id="settingsBtn"></div>
             <div class="black-overlay" id="blackOverlay"></div>
-        
-        
+        </div>
     </div>
 </body>
 <script defer src="js/CelebApp.js"></script>
