@@ -79,7 +79,7 @@ class CelebApp {
         try {
             window.webAppManager = new WebAppManager({
                 appID: this.appID,
-                requireHomeScreen: false,
+                requireHomeScreen: true,  // Require app to be installed to home screen
                 splashDuration: 2000
             });
             
