@@ -127,13 +127,15 @@ class CelebApp {
         if (!this.userID) return;
 
         try {
-            const formData = new FormData();
-            formData.append('userID', this.userID);
-            formData.append('appID', this.appID);
-
             const response = await fetch(`${this.baseAPI}/ai-credits/balance`, {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    userID: this.userID,
+                    appID: this.appID
+                })
             });
 
             const data = await response.json();
@@ -141,11 +143,14 @@ class CelebApp {
             if (data.type === 'success') {
                 this.credits = data.credits;
                 this.updateCreditsDisplay();
+                this.debugLog(`💰 Credits loaded: ${data.credits}`, 'success');
             } else {
                 console.error('Failed to load credits:', data.message);
+                this.debugLog(`❌ Failed to load credits: ${data.message}`, 'error');
             }
         } catch (error) {
             console.error('Error loading credits:', error);
+            this.debugLog(`❌ Error loading credits: ${error.message}`, 'error');
         }
     }
 
