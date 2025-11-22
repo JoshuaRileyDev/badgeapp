@@ -271,9 +271,13 @@ class CelebApp {
                 console.log('Voice input:', transcript, 'isFinal:', isFinal, 'confidence:', confidence);
                 
                 // Always log if debug mode is enabled (check at runtime)
-                this.debugLog(`${isFinal ? '✓ FINAL' : '⋯ interim'}: "${transcript}" (confidence: ${(confidence * 100).toFixed(1)}%)`, 'transcript');
+                const confidencePercent = confidence ? (confidence * 100).toFixed(1) : 'N/A';
+                this.debugLog(`${isFinal ? '✓ FINAL' : '⋯ interim'}: "${transcript}" (conf: ${confidencePercent}%)`, 'transcript');
                 
                 if (isFinal) {
+                    // Show word count in debug
+                    const wordCount = transcript.trim().split(/\s+/).length;
+                    this.debugLog(`📝 Received ${wordCount} word(s): "${transcript}"`, 'info');
                     this.processCelebrityName(transcript);
                 }
             };
@@ -355,22 +359,54 @@ class CelebApp {
     processCelebrityName(input) {
         this.debugLog(`Processing input: "${input}"`, 'info');
         
+        // Clean up the input
+        const cleanInput = input.trim();
+        
+        // Check if input has at least 2 words (full name)
+        const wordCount = cleanInput.split(/\s+/).length;
+        if (wordCount < 2) {
+            this.debugLog(`⚠️ Need full name (got ${wordCount} word${wordCount !== 1 ? 's' : ''})`, 'error');
+            this.hideBlackOverlay();
+            return;
+        }
+        
+        this.debugLog(`✓ Full name detected (${wordCount} words)`, 'info');
+        
+        // Configure Fuse.js for better name matching
         const fuse = new Fuse(this.celebrities, {
             includeScore: true,
-            threshold: 0.4
+            threshold: 0.3,  // More strict matching (lower = stricter)
+            keys: [
+                {
+                    name: 'name',
+                    getFn: (item) => item
+                }
+            ],
+            ignoreLocation: true,  // Don't care about position in string
+            findAllMatches: true,  // Find all matching patterns
+            minMatchCharLength: 3  // Minimum 3 characters to match
         });
 
-        const results = fuse.search(input);
+        const results = fuse.search(cleanInput);
+        
+        // Show top 5 matches in debug
+        if (this.debugMode && results.length > 0) {
+            this.debugLog(`Found ${results.length} potential matches:`, 'info');
+            results.slice(0, 5).forEach((result, index) => {
+                this.debugLog(`  ${index + 1}. ${result.item} (score: ${result.score.toFixed(3)})`, 'info');
+            });
+        }
         
         if (results.length > 0) {
             const matchedCelebrity = results[0].item;
             const matchScore = results[0].score;
             console.log('Matched celebrity:', matchedCelebrity);
-            this.debugLog(`Match found: ${matchedCelebrity} (score: ${matchScore.toFixed(3)})`, 'success');
+            this.debugLog(`✅ Best match: ${matchedCelebrity} (score: ${matchScore.toFixed(3)})`, 'success');
             this.generateSelfie(matchedCelebrity);
         } else {
             console.log('No celebrity match found for:', input);
-            this.debugLog(`No match found for: "${input}"`, 'error');
+            this.debugLog(`❌ No match found for: "${input}"`, 'error');
+            this.debugLog('Try saying the full name clearly', 'info');
             this.hideBlackOverlay();
         }
     }
