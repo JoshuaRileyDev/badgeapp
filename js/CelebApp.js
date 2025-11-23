@@ -4,8 +4,7 @@ class CelebApp {
         this.dbVersion = 1;
         this.db = null;
         this.userImage = null;
-        this.recognition = null;
-        this.isListening = false;
+        this.inputTimeout = null;
         this.debugMode = false;  // Debug mode toggle
         
         // MagicApps API configuration
@@ -16,7 +15,7 @@ class CelebApp {
         
         // Celebrity list for Fuse.js matching
         this.celebrities = [
-            'Tom Cruise', 'Brad Pitt', 'Leonardo DiCaprio', 'Will Smith', 'Johnny Depp',
+            'Tom Cruise', 'Tom Hiddleston', 'Tom Hardy', 'Brad Pitt', 'Leonardo DiCaprio', 'Will Smith', 'Johnny Depp',
             'Robert Downey Jr', 'Chris Hemsworth', 'Chris Evans', 'Ryan Reynolds', 'Dwayne Johnson',
             'Scarlett Johansson', 'Jennifer Lawrence', 'Emma Watson', 'Angelina Jolie', 'Margot Robbie',
             'Gal Gadot', 'Emma Stone', 'Anne Hathaway', 'Natalie Portman', 'Charlize Theron',
@@ -45,9 +44,9 @@ class CelebApp {
             await this.loadCredits();
         }
         this.setupEventListeners();
-        this.initVoiceRecognition();
         this.createSettingsModal();
         this.createDebugOverlay();
+        this.createImageStatusIndicator();
         await this.loadDebugMode();
     }
 
@@ -255,65 +254,16 @@ class CelebApp {
         homescreen.addEventListener('click', (e) => {
             this.handleHomescreenTap(e);
         });
-    }
 
-    // Initialize voice recognition
-    initVoiceRecognition() {
-        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            this.recognition = new SpeechRecognition();
-            this.recognition.continuous = false;
-            this.recognition.interimResults = true;  // Enable interim results for debug mode
-            this.recognition.lang = 'en-US';
-            
-            console.log('Voice recognition initialized:', {
-                continuous: this.recognition.continuous,
-                interimResults: this.recognition.interimResults,
-                lang: this.recognition.lang
-            });
-
-            this.recognition.onstart = () => {
-                this.debugLog('✅ Voice recognition started successfully', 'success');
-                this.debugLog(`Settings: interimResults=${this.recognition.interimResults}, lang=${this.recognition.lang}`, 'info');
-            };
-
-            this.recognition.onresult = (event) => {
-                // Get the last result (most recent)
-                const lastResultIndex = event.results.length - 1;
-                const transcript = event.results[lastResultIndex][0].transcript;
-                const isFinal = event.results[lastResultIndex].isFinal;
-                const confidence = event.results[lastResultIndex][0].confidence;
-                
-                console.log('Voice input:', transcript, 'isFinal:', isFinal, 'confidence:', confidence);
-                
-                // Always log if debug mode is enabled (check at runtime)
-                const confidencePercent = confidence ? (confidence * 100).toFixed(1) : 'N/A';
-                this.debugLog(`${isFinal ? '✓ FINAL' : '⋯ interim'}: "${transcript}" (conf: ${confidencePercent}%)`, 'transcript');
-                
-                if (isFinal) {
-                    // Show word count in debug
-                    const wordCount = transcript.trim().split(/\s+/).length;
-                    this.debugLog(`📝 Received ${wordCount} word(s)`, 'info');
-                    this.processCelebrityName(transcript);
-                }
-            };
-
-            this.recognition.onerror = (event) => {
-                console.error('Speech recognition error:', event.error);
-                this.debugLog(`Error: ${event.error}`, 'error');
-                this.isListening = false;
-                this.hideBlackOverlay();
-            };
-
-            this.recognition.onend = () => {
-                this.isListening = false;
-                this.debugLog('Voice recognition ended', 'info');
-            };
-        } else {
-            const errorMsg = 'Speech recognition not supported in this browser';
-            console.warn(errorMsg);
-            this.debugLog(errorMsg, 'error');
-        }
+        // Setup text input event listener
+        const textInput = document.getElementById('hiddenTextInput');
+        textInput.addEventListener('input', (e) => {
+            this.handleTextInput(e);
+        });
+        
+        textInput.addEventListener('blur', () => {
+            this.hideBlackOverlay();
+        });
     }
 
     // Handle homescreen tap
@@ -321,9 +271,9 @@ class CelebApp {
         // Create ripple effect
         this.createRipple(e.clientX, e.clientY);
 
-        // Show black overlay and start listening
+        // Show black overlay and focus text input
         this.showBlackOverlay();
-        this.startListening();
+        this.focusTextInput();
     }
 
     // Create ripple animation
@@ -351,24 +301,134 @@ class CelebApp {
         overlay.classList.remove('active');
     }
 
-    // Start voice listening
-    startListening() {
-        if (this.recognition && !this.isListening) {
-            this.isListening = true;
-            try {
-                this.recognition.start();
-                console.log('Listening for celebrity name...');
-                this.debugLog('🎤 Microphone activated - speak now!', 'info');
-            } catch (error) {
-                console.error('Failed to start recognition:', error);
-                this.debugLog(`Failed to start: ${error.message}`, 'error');
-                this.isListening = false;
-            }
-        } else if (!this.recognition) {
-            this.debugLog('Voice recognition not supported', 'error');
-        } else if (this.isListening) {
-            this.debugLog('Already listening...', 'info');
+    // Focus text input and show keyboard
+    focusTextInput() {
+        // Check if user image is set
+        if (!this.userImage || !(this.userImage instanceof File)) {
+            this.showImageRequiredMessage();
+            return;
         }
+        
+        const textInput = document.getElementById('hiddenTextInput');
+        textInput.value = ''; // Clear previous input
+        textInput.focus();
+        
+        // Show visual indicator that keyboard is active
+        this.showKeyboardIndicator();
+    }
+
+    // Handle text input
+    handleTextInput(e) {
+        const input = e.target.value.trim();
+        
+        if (input.length > 0) {
+            this.debugLog(`📝 Text input: "${input}"`, 'input');
+            
+            // Clear previous timeout
+            clearTimeout(this.inputTimeout);
+            
+            // Process the input when user stops typing (debounce)
+            this.inputTimeout = setTimeout(() => {
+                this.processCelebrityName(input);
+            }, 800); // Slightly longer debounce for better UX
+        }
+    }
+
+    // Show keyboard indicator
+    showKeyboardIndicator() {
+        this.showLoadingMessage('Type a celebrity name...');
+    }
+
+    // Show image required message
+    showImageRequiredMessage() {
+        this.showBlackOverlay();
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            z-index: 1001;
+            max-width: 350px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        `;
+        
+        messageDiv.innerHTML = `
+            <div style="font-size: 24px; margin-bottom: 15px;">📷</div>
+            <h3 style="margin: 0 0 15px 0; color: #007AFF;">Image Required</h3>
+            <p style="margin: 0 0 20px 0; line-height: 1.5;">Please upload your photo in settings before generating celebrity selfies.</p>
+            <button onclick="window.celebApp.hideImageRequiredMessage()" style="
+                background: #007AFF;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: bold;
+                cursor: pointer;
+            ">Go to Settings</button>
+        `;
+        
+        const overlay = document.getElementById('blackOverlay');
+        overlay.appendChild(messageDiv);
+    }
+
+    // Hide image required message
+    hideImageRequiredMessage() {
+        this.hideBlackOverlay();
+        this.openSettingsModal();
+    }
+
+    // Show user image as full-width display
+    showUserImageDisplay() {
+        if (!this.userImage || !(this.userImage instanceof File)) {
+            return;
+        }
+
+        this.showBlackOverlay();
+        
+        const imageContainer = document.createElement('div');
+        imageContainer.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1001;
+            background: black;
+        `;
+        
+        const img = document.createElement('img');
+        img.style.cssText = `
+            width: 100vw;
+            height: 100vh;
+            object-fit: contain;
+            display: block;
+        `;
+        
+        // Create object URL for the user image
+        const imageUrl = URL.createObjectURL(this.userImage);
+        img.src = imageUrl;
+        
+        // Add close on click
+        imageContainer.addEventListener('click', () => {
+            URL.revokeObjectURL(imageUrl);
+            this.hideBlackOverlay();
+        });
+        
+        imageContainer.appendChild(img);
+        
+        const overlay = document.getElementById('blackOverlay');
+        overlay.appendChild(imageContainer);
     }
 
     // Process celebrity name using Fuse.js
@@ -377,6 +437,13 @@ class CelebApp {
         
         // Clean up the input
         const cleanInput = input.trim();
+        const inputWords = cleanInput.toLowerCase().split(/\s+/);
+        
+        // Require minimum input length to prevent premature matching
+        if (cleanInput.length < 3) {
+            this.debugLog(`Input too short (${cleanInput.length} chars), need at least 3`, 'info');
+            return; // Don't process yet, let user keep typing
+        }
         
         // Try to find celebrity name within the sentence
         let bestMatch = null;
@@ -384,7 +451,7 @@ class CelebApp {
         
         this.debugLog(`🔍 Searching for celebrity name in input...`, 'info');
         
-        // Check each celebrity against the input sentence
+        // Check each celebrity against the input sentence for exact match
         for (const celebrity of this.celebrities) {
             if (cleanInput.toLowerCase().includes(celebrity.toLowerCase())) {
                 this.debugLog(`✓ Found exact match: "${celebrity}"`, 'success');
@@ -394,23 +461,24 @@ class CelebApp {
             }
         }
         
-        // If no exact match found, try fuzzy matching on the whole input
+        // If no exact match found, try fuzzy matching with smart criteria
         if (!bestMatch) {
             this.debugLog(`No exact match found, trying fuzzy search...`, 'info');
         
-            // Configure Fuse.js for better name matching
+            // Configure Fuse.js for smart name matching
             const fuse = new Fuse(this.celebrities, {
                 includeScore: true,
-                threshold: 0.4,  // Allow some flexibility for fuzzy matching
+                threshold: 0.4,  // Moderate threshold for flexibility
                 keys: [
                     {
                         name: 'name',
                         getFn: (item) => item
                     }
                 ],
-                ignoreLocation: true,  // Don't care about position in string
-                findAllMatches: true,  // Find all matching patterns
-                minMatchCharLength: 3  // Minimum 3 characters to match
+                ignoreLocation: true,
+                findAllMatches: true,
+                minMatchCharLength: 3,  // Minimum 3 characters to match
+                distance: 100
             });
 
             const results = fuse.search(cleanInput);
@@ -423,7 +491,114 @@ class CelebApp {
                 });
             }
             
-            if (results.length > 0 && results[0].score < 0.5) {
+            // Smart matching logic based on input length and word count
+            if (results.length > 0) {
+                const topResult = results[0];
+                const celebrityWords = topResult.item.toLowerCase().split(/\s+/);
+                
+                // Different criteria based on input characteristics
+                let shouldAccept = false;
+                
+                if (inputWords.length >= 2) {
+                    // Multi-word input: more lenient matching
+                    shouldAccept = topResult.score < 0.3;
+                    this.debugLog(`Multi-word input detected, using lenient threshold (< 0.3)`, 'info');
+                } else if (cleanInput.length >= 6) {
+                    // Single word but long enough: stricter matching
+                    shouldAccept = topResult.score < 0.15;
+                    this.debugLog(`Long single-word input, using strict threshold (< 0.15)`, 'info');
+                } else if (cleanInput.length >= 4) {
+                    // Short single word: very strict matching
+                    shouldAccept = topResult.score < 0.1;
+                    this.debugLog(`Short single-word input, using very strict threshold (< 0.1)`, 'info');
+                }
+                
+                // Additional check: if input contains part of the celebrity name
+                const inputLower = cleanInput.toLowerCase();
+                const celebrityLower = topResult.item.toLowerCase();
+                const hasPartialMatch = celebrityWords.some(word => 
+                    word.includes(inputLower) || inputLower.includes(word)
+                );
+                
+                if (hasPartialMatch && cleanInput.length >= 4) {
+                    shouldAccept = true;
+                    this.debugLog(`Partial name match detected, accepting`, 'info');
+                }
+                
+                if (shouldAccept) {
+                    bestMatch = topResult.item;
+                    bestScore = topResult.score;
+                    this.debugLog(`Fuzzy match: ${bestMatch} (score: ${bestScore.toFixed(3)})`, 'success');
+                }
+            }
+        }
+        
+        if (bestMatch) {
+            console.log('Matched celebrity:', bestMatch);
+            this.debugLog(`✅ Final match: ${bestMatch} (score: ${bestScore.toFixed(3)})`, 'success');
+            this.generateSelfie(bestMatch);
+        } else {
+            // Only show "no match" message if input is substantial enough
+            if (cleanInput.length >= 4) {
+                console.log('No celebrity match found for:', input);
+                this.debugLog(`❌ No match found in: "${input}"`, 'error');
+                this.debugLog('💡 Try typing full celebrity name (e.g., "Tom Cruise", "Tom Hiddleston")', 'info');
+                this.hideBlackOverlay();
+            }
+        }
+    }
+        
+        // Try to find celebrity name within the sentence
+        let bestMatch = null;
+        let bestScore = 1; // Lower is better in Fuse.js
+        
+        this.debugLog(`🔍 Searching for celebrity name in input...`, 'info');
+        
+        // Check each celebrity against the input sentence for exact match
+        for (const celebrity of this.celebrities) {
+            if (cleanInput.toLowerCase().includes(celebrity.toLowerCase())) {
+                this.debugLog(`✓ Found exact match: "${celebrity}"`, 'success');
+                bestMatch = celebrity;
+                bestScore = 0;
+                break;
+            }
+        }
+        
+        // If no exact match found, try fuzzy matching with stricter criteria
+        if (!bestMatch) {
+            this.debugLog(`No exact match found, trying fuzzy search...`, 'info');
+        
+            // Configure Fuse.js for more precise name matching
+            const fuse = new Fuse(this.celebrities, {
+                includeScore: true,
+                threshold: 0.3,  // Stricter threshold for better accuracy
+                keys: [
+                    {
+                        name: 'name',
+                        getFn: (item) => item
+                    }
+                ],
+                ignoreLocation: true,
+                findAllMatches: true,
+                minMatchCharLength: 4,  // Require at least 4 characters
+                distance: 100  // Maximum distance between matches
+            });
+
+            const results = fuse.search(cleanInput);
+            
+            // Show top 5 matches in debug
+            if (this.debugMode && results.length > 0) {
+                this.debugLog(`Found ${results.length} potential matches:`, 'info');
+                results.slice(0, 5).forEach((result, index) => {
+                    this.debugLog(`  ${index + 1}. ${result.item} (score: ${result.score.toFixed(3)})`, 'info');
+                });
+            }
+            
+            // Only accept matches with very good scores and sufficient input length
+            if (results.length > 0 && 
+                results[0].score < 0.2 &&  // Much stricter score requirement
+                cleanInput.length >= 4) {  // Require at least 4 characters input
+                
                 bestMatch = results[0].item;
                 bestScore = results[0].score;
                 this.debugLog(`Fuzzy match: ${bestMatch} (score: ${bestScore.toFixed(3)})`, 'success');
@@ -435,10 +610,13 @@ class CelebApp {
             this.debugLog(`✅ Final match: ${bestMatch} (score: ${bestScore.toFixed(3)})`, 'success');
             this.generateSelfie(bestMatch);
         } else {
-            console.log('No celebrity match found for:', input);
-            this.debugLog(`❌ No match found in: "${input}"`, 'error');
-            this.debugLog('💡 Try saying just the celebrity name (e.g., "Tom Cruise")', 'info');
-            this.hideBlackOverlay();
+            // Only show "no match" message if input is substantial enough
+            if (cleanInput.length >= 4) {
+                console.log('No celebrity match found for:', input);
+                this.debugLog(`❌ No match found in: "${input}"`, 'error');
+                this.debugLog('💡 Try typing the full celebrity name (e.g., "Tom Cruise", "Tom Hiddleston")', 'info');
+                this.hideBlackOverlay();
+            }
         }
     }
 
@@ -729,8 +907,11 @@ class CelebApp {
 
         // Image upload
         const imageLabel = document.createElement('label');
-        imageLabel.textContent = 'Your Image';
-        imageLabel.style.cssText = 'display: block; margin-bottom: 5px; font-weight: 500;';
+        imageLabel.textContent = 'Your Image *Required';
+        imageLabel.style.cssText = 'display: block; margin-bottom: 5px; font-weight: 500; color: #007AFF;';
+
+        const imageContainer = document.createElement('div');
+        imageContainer.style.cssText = 'margin-bottom: 15px;';
 
         const imageUpload = document.createElement('input');
         imageUpload.type = 'file';
@@ -740,9 +921,37 @@ class CelebApp {
             padding: 12px;
             border: 2px solid #ddd;
             border-radius: 8px;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
             box-sizing: border-box;
         `;
+
+        // Image status indicator
+        const imageStatus = document.createElement('div');
+        imageStatus.id = 'imageStatus';
+        imageStatus.style.cssText = `
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+        `;
+
+        // View image button
+        const viewImageBtn = document.createElement('button');
+        viewImageBtn.textContent = '📷 View Your Image';
+        viewImageBtn.style.cssText = `
+            width: 100%;
+            padding: 10px;
+            background: #f0f0f0;
+            color: #333;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-bottom: 10px;
+        `;
+
+        imageContainer.appendChild(imageUpload);
+        imageContainer.appendChild(imageStatus);
+        imageContainer.appendChild(viewImageBtn);
 
         // Homescreen image upload
         const homescreenLabel = document.createElement('label');
@@ -803,8 +1012,29 @@ class CelebApp {
         imageUpload.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
-                // Store the file object directly
+                // Validate file type
+                if (!file.type.startsWith('image/')) {
+                    alert('Please select an image file');
+                    return;
+                }
+                
+                // Validate file size (max 10MB)
+                if (file.size > 10 * 1024 * 1024) {
+                    alert('Image file must be less than 10MB');
+                    return;
+                }
+                
+                // Store file object directly
                 this.userImage = file;
+                
+                // Update status
+                this.updateImageStatus(file);
+                
+                // Update indicator
+                const indicator = document.getElementById('imageStatusIndicator');
+                if (indicator) {
+                    this.updateImageStatusIndicator(indicator);
+                }
                 
                 // Save as base64 for persistence
                 const reader = new FileReader();
@@ -813,6 +1043,10 @@ class CelebApp {
                 };
                 reader.readAsDataURL(file);
             }
+        });
+
+        viewImageBtn.addEventListener('click', () => {
+            this.showUserImageDisplay();
         });
 
         homescreenUpload.addEventListener('change', (e) => {
@@ -846,7 +1080,7 @@ class CelebApp {
         `;
 
         const debugText = document.createElement('span');
-        debugText.textContent = 'Show voice recognition debug info';
+        debugText.textContent = 'Show text input debug info';
         debugText.style.cssText = 'font-size: 14px;';
 
         const debugToggle = document.createElement('input');
@@ -876,7 +1110,7 @@ class CelebApp {
         content.appendChild(debugLabel);
         content.appendChild(debugToggleContainer);
         content.appendChild(imageLabel);
-        content.appendChild(imageUpload);
+        content.appendChild(imageContainer);
         content.appendChild(homescreenLabel);
         content.appendChild(homescreenUpload);
         content.appendChild(saveBtn);
@@ -892,6 +1126,21 @@ class CelebApp {
         });
     }
 
+    // Update image status display
+    updateImageStatus(file) {
+        const statusDiv = document.getElementById('imageStatus');
+        if (statusDiv) {
+            if (file) {
+                const fileSize = (file.size / 1024 / 1024).toFixed(2);
+                statusDiv.innerHTML = `✅ ${file.name} (${fileSize} MB)`;
+                statusDiv.style.color = '#34C759';
+            } else {
+                statusDiv.innerHTML = '❌ No image uploaded';
+                statusDiv.style.color = '#FF3B30';
+            }
+        }
+    }
+
     // Open settings modal
     async openSettingsModal() {
         const modal = document.getElementById('settingsModal');
@@ -901,6 +1150,9 @@ class CelebApp {
         if (this.userID) {
             await this.loadCredits();
         }
+        
+        // Update image status
+        this.updateImageStatus(this.userImage);
     }
 
     // Close settings modal
@@ -945,7 +1197,7 @@ class CelebApp {
         `;
 
         const title = document.createElement('div');
-        title.textContent = '🎤 Voice Debug';
+        title.textContent = '⌨️ Text Input Debug';
         title.style.cssText = `
             font-weight: bold;
             margin-bottom: 10px;
@@ -961,6 +1213,41 @@ class CelebApp {
         overlay.appendChild(title);
         overlay.appendChild(logContainer);
         document.body.appendChild(overlay);
+    }
+
+    // Create image status indicator
+    createImageStatusIndicator() {
+        const indicator = document.createElement('div');
+        indicator.id = 'imageStatusIndicator';
+        indicator.style.cssText = `
+            position: fixed;
+            top: env(safe-area-inset-top, 20px);
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.3s ease;
+        `;
+
+        this.updateImageStatusIndicator(indicator);
+        document.body.appendChild(indicator);
+    }
+
+    // Update image status indicator
+    updateImageStatusIndicator(indicator) {
+        if (!this.userImage || !(this.userImage instanceof File)) {
+            indicator.innerHTML = '📷 No Image';
+            indicator.style.background = 'rgba(255, 59, 48, 0.9)';
+        } else {
+            indicator.innerHTML = '📷 Image Set';
+            indicator.style.background = 'rgba(52, 199, 89, 0.9)';
+        }
     }
 
     // Toggle debug overlay visibility
@@ -1000,7 +1287,7 @@ class CelebApp {
                 logEntry.style.borderLeftColor = '#ff0000';
                 logEntry.style.color = '#ff6666';
                 break;
-            case 'transcript':
+            case 'input':
                 logEntry.style.borderLeftColor = '#00ffff';
                 logEntry.style.color = '#00ffff';
                 break;
@@ -1027,5 +1314,5 @@ class CelebApp {
 
 // Initialize the app when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    new CelebApp();
+    window.celebApp = new CelebApp();
 });

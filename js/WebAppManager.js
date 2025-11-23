@@ -107,9 +107,14 @@ class WebAppManager {
     }
 
     // Check if we should show home screen prompt
-    if (this.requireHomeScreen && !this.isRunningAsApp()) {
+    if (this.requireHomeScreen && !this.isRunningAsApp() && !this.isLocalhost()) {
       this.showHomeScreenPrompt();
       return;
+    }
+
+    // Log if localhost mode is detected
+    if (this.isLocalhost()) {
+      console.log('🏠 Localhost detected - skipping home screen requirement');
     }
 
     // Show login form if not logged in
@@ -222,6 +227,17 @@ class WebAppManager {
     // Check if running as standalone PWA
     return window.matchMedia('(display-mode: standalone)').matches || 
            window.navigator.standalone === true;
+  }
+
+  isLocalhost() {
+    // Check if running on localhost or 127.0.0.1
+    const hostname = window.location.hostname;
+    return hostname === 'localhost' || 
+           hostname === '127.0.0.1' || 
+           hostname.startsWith('127.0.0.') ||
+           hostname.startsWith('192.168.') ||
+           hostname.startsWith('10.') ||
+           hostname.endsWith('.local');
   }
 
   async getAppDetails() {
