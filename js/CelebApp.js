@@ -6,6 +6,7 @@ class CelebApp {
         this.userImage = null;
         this.inputTimeout = null;
         this.debugMode = false;  // Debug mode toggle
+        this.customPrompt = 'a selfie photo with $$$, professional photography, high quality, realistic';  // Default custom prompt
         
         // MagicApps API configuration
         this.baseAPI = 'https://api.magicapps.co.uk/api';
@@ -194,6 +195,11 @@ class CelebApp {
             if (savedUserImage) {
                 // Convert base64 to File object
                 this.userImage = await this.base64ToFile(savedUserImage, 'user-image.jpg');
+            }
+
+            const savedCustomPrompt = await this.getFromDB('settings', 'customPrompt');
+            if (savedCustomPrompt) {
+                this.customPrompt = savedCustomPrompt;
             }
 
             const imageData = await this.getFromDB('homeScreenImage', 'image');
@@ -646,11 +652,15 @@ class CelebApp {
             // Show loading message on overlay
             this.showLoadingMessage('Generating selfie...');
 
+            // Create prompt using custom template
+            const prompt = this.customPrompt.replace('$$$', celebrityName);
+            console.log('Using prompt:', prompt);
+            
             // Call MagicApps API which handles Replicate
             const formData = new FormData();
             formData.append('userID', this.userID);
             formData.append('appID', this.appID);
-            formData.append('prompt', `a selfie photo with ${celebrityName}, professional photography, high quality, realistic`);
+            formData.append('prompt', prompt);
             
             // Add the user image to the images array (optional for Gemini)
             formData.append('images', this.userImage, this.userImage.name);
@@ -824,79 +834,141 @@ class CelebApp {
             justify-content: center;
             z-index: 5000;
             overflow-y: auto;
+            backdrop-filter: blur(10px);
         `;
 
         const content = document.createElement('div');
         content.style.cssText = `
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            border-radius: 24px;
+            padding: 0;
             width: 90%;
-            max-width: 400px;
+            max-width: 480px;
             max-height: 90vh;
             overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            position: relative;
+        `;
+
+        // Header
+        const header = document.createElement('div');
+        header.style.cssText = `
+            background: linear-gradient(135deg, #007AFF 0%, #5856D6 100%);
+            color: white;
+            padding: 24px;
+            border-radius: 24px 24px 0 0;
+            text-align: center;
+            position: relative;
         `;
 
         const title = document.createElement('h2');
-        title.textContent = 'Settings';
-        title.style.cssText = 'margin: 0 0 20px 0; font-size: 24px; font-weight: bold;';
+        title.textContent = '⚙️ Settings';
+        title.style.cssText = 'margin: 0; font-size: 28px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.1);';
 
-        // Credits display
-        const creditsContainer = document.createElement('div');
-        creditsContainer.style.cssText = `
-            background: #f0f0f0;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 20px;
-            text-align: center;
-        `;
+        const subtitle = document.createElement('p');
+        subtitle.textContent = 'Customize your celebrity selfie experience';
+        subtitle.style.cssText = 'margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;';
 
-        const creditsLabel = document.createElement('p');
-        creditsLabel.textContent = 'Your Credits';
-        creditsLabel.style.cssText = 'margin: 0 0 5px 0; color: #666; font-size: 14px;';
+        header.appendChild(title);
+        header.appendChild(subtitle);
 
-        const creditsDisplay = document.createElement('p');
-        creditsDisplay.id = 'creditsDisplay';
-        creditsDisplay.textContent = this.credits;
-        creditsDisplay.style.cssText = 'margin: 0; font-size: 32px; font-weight: bold; color: #007AFF;';
+        // Main content area
+        const mainContent = document.createElement('div');
+        mainContent.style.cssText = 'padding: 24px;';
 
-        creditsContainer.appendChild(creditsLabel);
-        creditsContainer.appendChild(creditsDisplay);
+        // Credits section
+        const creditsSection = this.createSection('💰 Credits', `
+            <div style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 16px; padding: 20px; text-align: center; border: 2px solid #0ea5e9;">
+                <div style="font-size: 14px; color: #0369a1; margin-bottom: 8px; font-weight: 600;">Available Credits</div>
+                <div id="creditsDisplay" style="font-size: 36px; font-weight: 800; color: #0c4a6e; margin: 0;">${this.credits}</div>
+            </div>
+        `);
 
-        // User info display (read-only)
-        const userInfoLabel = document.createElement('label');
-        userInfoLabel.textContent = 'User Info';
-        userInfoLabel.style.cssText = 'display: block; margin-bottom: 5px; font-weight: 500;';
-
-        const userInfoDisplay = document.createElement('div');
+        // User info section
         const userName = localStorage.getItem('fullName') || 'User';
         const userEmail = localStorage.getItem('email') || '';
-        userInfoDisplay.innerHTML = `
-            <div style="padding: 12px; background: #f0f0f0; border-radius: 8px; margin-bottom: 10px;">
-                <div style="font-weight: 600; margin-bottom: 4px;">${userName}</div>
-                <div style="font-size: 14px; color: #666;">${userEmail}</div>
-                <div style="font-size: 12px; color: #999; margin-top: 4px;">ID: ${this.userID || 'Not authenticated'}</div>
+        const userInfoSection = this.createSection('👤 User Info', `
+            <div style="background: #f8fafc; border-radius: 12px; padding: 16px; border: 1px solid #e2e8f0;">
+                <div style="font-weight: 600; color: #1e293b; margin-bottom: 8px; font-size: 16px;">${userName}</div>
+                <div style="color: #64748b; font-size: 14px; margin-bottom: 4px;">${userEmail}</div>
+                <div style="color: #94a3b8; font-size: 12px;">ID: ${this.userID || 'Not authenticated'}</div>
             </div>
-        `;
-        userInfoDisplay.style.cssText = 'margin-bottom: 20px;';
+        `);
 
-        // Logout button
-        const logoutBtn = document.createElement('button');
-        logoutBtn.textContent = 'Logout';
-        logoutBtn.style.cssText = `
-            width: 100%;
-            padding: 12px;
-            background: #FF3B30;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            margin-bottom: 20px;
-        `;
+        // Custom prompt section
+        const promptSection = this.createSection('✨ Custom Prompt', `
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; font-weight: 600; color: #374151; margin-bottom: 8px; font-size: 14px;">
+                    AI Prompt Template
+                    <span style="color: #6b7280; font-weight: 400; font-size: 12px; margin-left: 4px;">Use $$$ for celebrity name</span>
+                </label>
+                <textarea 
+                    id="customPrompt" 
+                    style="width: 100%; min-height: 80px; padding: 12px; border: 2px solid #e5e7eb; border-radius: 12px; font-size: 14px; font-family: inherit; resize: vertical; background: #f9fafb; transition: all 0.2s;"
+                    placeholder="Enter your custom prompt... use $$$ for celebrity name"
+                >${this.customPrompt}</textarea>
+                <div id="promptPreview" style="margin-top: 8px; padding: 12px; background: #f3f4f6; border-radius: 8px; font-size: 13px; color: #4b5563; border-left: 3px solid #9ca3af;">
+                    <strong>Preview:</strong> <span id="previewText"></span>
+                </div>
+            </div>
+        `);
 
-        logoutBtn.addEventListener('click', () => {
+        // Image upload section
+        const imageSection = this.createSection('📷 Your Photo', `
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; font-weight: 600; color: #374151; margin-bottom: 8px; font-size: 14px;">
+                    Profile Picture <span style="color: #ef4444;">*</span>
+                </label>
+                <div style="position: relative;">
+                    <input 
+                        type="file" 
+                        id="imageUpload" 
+                        accept="image/*"
+                        style="width: 100%; padding: 12px 40px 12px 12px; border: 2px solid #e5e7eb; border-radius: 12px; font-size: 14px; background: #f9fafb; cursor: pointer;"
+                    />
+                    <div style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #9ca3af;">📁</div>
+                </div>
+                <div id="imageStatus" style="margin-top: 8px; font-size: 13px; color: #6b7280;"></div>
+                <button 
+                    id="viewImageBtn"
+                    style="width: 100%; padding: 10px; background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; cursor: pointer; margin-top: 8px; transition: all 0.2s;"
+                >👁️ View Your Image</button>
+            </div>
+        `);
+
+        // Homescreen section
+        const homescreenSection = this.createSection('🖼️ Background', `
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; font-weight: 600; color: #374151; margin-bottom: 8px; font-size: 14px;">Home Screen Background</label>
+                <div style="position: relative;">
+                    <input 
+                        type="file" 
+                        id="homescreenUpload" 
+                        accept="image/*"
+                        style="width: 100%; padding: 12px 40px 12px 12px; border: 2px solid #e5e7eb; border-radius: 12px; font-size: 14px; background: #f9fafb; cursor: pointer;"
+                    />
+                    <div style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #9ca3af;">📁</div>
+                </div>
+            </div>
+        `);
+
+        // Debug section
+        const debugSection = this.createSection('🔧 Debug', `
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0;">
+                <span style="font-size: 14px; color: #374151;">Show debug info</span>
+                <label style="position: relative; display: inline-block; width: 48px; height: 24px;">
+                    <input type="checkbox" id="debugToggle" ${this.debugMode ? 'checked' : ''} style="opacity: 0; width: 0; height: 0;">
+                    <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #d1d5db; transition: 0.3s; border-radius: 24px;"></span>
+                    <span style="position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%;"></span>
+                </label>
+            </div>
+        `);
+
+        // Action buttons
+        const actionsDiv = document.createElement('div');
+        actionsDiv.style.cssText = 'display: flex; gap: 12px; margin-top: 24px;';
+
+        const logoutBtn = this.createButton('🚪 Logout', '#ef4444', () => {
             if (confirm('Are you sure you want to logout?')) {
                 localStorage.removeItem('email');
                 localStorage.removeItem('userID');
@@ -905,218 +977,33 @@ class CelebApp {
             }
         });
 
-        // Image upload
-        const imageLabel = document.createElement('label');
-        imageLabel.textContent = 'Your Image *Required';
-        imageLabel.style.cssText = 'display: block; margin-bottom: 5px; font-weight: 500; color: #007AFF;';
-
-        const imageContainer = document.createElement('div');
-        imageContainer.style.cssText = 'margin-bottom: 15px;';
-
-        const imageUpload = document.createElement('input');
-        imageUpload.type = 'file';
-        imageUpload.accept = 'image/*';
-        imageUpload.style.cssText = `
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            margin-bottom: 10px;
-            box-sizing: border-box;
-        `;
-
-        // Image status indicator
-        const imageStatus = document.createElement('div');
-        imageStatus.id = 'imageStatus';
-        imageStatus.style.cssText = `
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 5px;
-        `;
-
-        // View image button
-        const viewImageBtn = document.createElement('button');
-        viewImageBtn.textContent = '📷 View Your Image';
-        viewImageBtn.style.cssText = `
-            width: 100%;
-            padding: 10px;
-            background: #f0f0f0;
-            color: #333;
-            border: none;
-            border-radius: 6px;
-            font-size: 14px;
-            cursor: pointer;
-            margin-bottom: 10px;
-        `;
-
-        imageContainer.appendChild(imageUpload);
-        imageContainer.appendChild(imageStatus);
-        imageContainer.appendChild(viewImageBtn);
-
-        // Homescreen image upload
-        const homescreenLabel = document.createElement('label');
-        homescreenLabel.textContent = 'Homescreen Background';
-        homescreenLabel.style.cssText = 'display: block; margin-bottom: 5px; font-weight: 500;';
-
-        const homescreenUpload = document.createElement('input');
-        homescreenUpload.type = 'file';
-        homescreenUpload.accept = 'image/*';
-        homescreenUpload.style.cssText = `
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            box-sizing: border-box;
-        `;
-
-        // Save button
-        const saveBtn = document.createElement('button');
-        saveBtn.textContent = 'Save';
-        saveBtn.style.cssText = `
-            width: 100%;
-            padding: 15px;
-            background: #007AFF;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 18px;
-            font-weight: bold;
-            cursor: pointer;
-            margin-bottom: 10px;
-        `;
-
-        // Refresh credits button
-        const refreshBtn = document.createElement('button');
-        refreshBtn.textContent = 'Refresh Credits';
-        refreshBtn.style.cssText = `
-            width: 100%;
-            padding: 12px;
-            background: #34C759;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-        `;
-
-        saveBtn.addEventListener('click', async () => {
-            this.closeSettingsModal();
-        });
-
-        refreshBtn.addEventListener('click', async () => {
+        const refreshBtn = this.createButton('🔄 Refresh Credits', '#10b981', async () => {
             await this.loadCredits();
         });
 
-        imageUpload.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                // Validate file type
-                if (!file.type.startsWith('image/')) {
-                    alert('Please select an image file');
-                    return;
-                }
-                
-                // Validate file size (max 10MB)
-                if (file.size > 10 * 1024 * 1024) {
-                    alert('Image file must be less than 10MB');
-                    return;
-                }
-                
-                // Store file object directly
-                this.userImage = file;
-                
-                // Update status
-                this.updateImageStatus(file);
-                
-                // Update indicator
-                const indicator = document.getElementById('imageStatusIndicator');
-                if (indicator) {
-                    this.updateImageStatusIndicator(indicator);
-                }
-                
-                // Save as base64 for persistence
-                const reader = new FileReader();
-                reader.onload = async (event) => {
-                    await this.saveToDB('settings', 'userImage', event.target.result);
-                };
-                reader.readAsDataURL(file);
-            }
+        const saveBtn = this.createButton('💾 Save Settings', '#007AFF', () => {
+            this.saveSettings();
         });
 
-        viewImageBtn.addEventListener('click', () => {
-            this.showUserImageDisplay();
-        });
+        actionsDiv.appendChild(logoutBtn);
+        actionsDiv.appendChild(refreshBtn);
+        actionsDiv.appendChild(saveBtn);
 
-        homescreenUpload.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = async (event) => {
-                    const imageData = event.target.result;
-                    const img = document.querySelector('.fullscreen-image');
-                    img.src = imageData;
-                    await this.saveToDB('homeScreenImage', 'image', imageData);
-                };
-                reader.readAsDataURL(file);
-            }
-        });
+        mainContent.appendChild(creditsSection);
+        mainContent.appendChild(userInfoSection);
+        mainContent.appendChild(promptSection);
+        mainContent.appendChild(imageSection);
+        mainContent.appendChild(homescreenSection);
+        mainContent.appendChild(debugSection);
+        mainContent.appendChild(actionsDiv);
 
-        // Debug mode toggle
-        const debugLabel = document.createElement('label');
-        debugLabel.textContent = 'Debug Mode';
-        debugLabel.style.cssText = 'display: block; margin-bottom: 10px; margin-top: 10px; font-weight: 500;';
-
-        const debugToggleContainer = document.createElement('div');
-        debugToggleContainer.style.cssText = `
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px;
-            background: #f0f0f0;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        `;
-
-        const debugText = document.createElement('span');
-        debugText.textContent = 'Show text input debug info';
-        debugText.style.cssText = 'font-size: 14px;';
-
-        const debugToggle = document.createElement('input');
-        debugToggle.type = 'checkbox';
-        debugToggle.id = 'debugToggle';
-        debugToggle.checked = this.debugMode;
-        debugToggle.style.cssText = `
-            width: 40px;
-            height: 20px;
-            cursor: pointer;
-        `;
-
-        debugToggle.addEventListener('change', async (e) => {
-            this.debugMode = e.target.checked;
-            await this.saveToDB('settings', 'debugMode', this.debugMode);
-            this.toggleDebugOverlay(this.debugMode);
-        });
-
-        debugToggleContainer.appendChild(debugText);
-        debugToggleContainer.appendChild(debugToggle);
-
-        content.appendChild(title);
-        content.appendChild(creditsContainer);
-        content.appendChild(userInfoLabel);
-        content.appendChild(userInfoDisplay);
-        content.appendChild(logoutBtn);
-        content.appendChild(debugLabel);
-        content.appendChild(debugToggleContainer);
-        content.appendChild(imageLabel);
-        content.appendChild(imageContainer);
-        content.appendChild(homescreenLabel);
-        content.appendChild(homescreenUpload);
-        content.appendChild(saveBtn);
-        content.appendChild(refreshBtn);
+        content.appendChild(header);
+        content.appendChild(mainContent);
         modal.appendChild(content);
         document.body.appendChild(modal);
+
+        // Setup event listeners
+        this.setupSettingsEventListeners();
 
         // Close on background click
         modal.addEventListener('click', (e) => {
@@ -1248,6 +1135,197 @@ class CelebApp {
             indicator.innerHTML = '📷 Image Set';
             indicator.style.background = 'rgba(52, 199, 89, 0.9)';
         }
+    }
+
+    // Helper method to create sections
+    createSection(title, content) {
+        const section = document.createElement('div');
+        section.style.cssText = 'margin-bottom: 20px;';
+        
+        const sectionTitle = document.createElement('h3');
+        sectionTitle.textContent = title;
+        sectionTitle.style.cssText = 'margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #1f2937;';
+        
+        const sectionContent = document.createElement('div');
+        sectionContent.innerHTML = content;
+        
+        section.appendChild(sectionTitle);
+        section.appendChild(sectionContent);
+        
+        return section;
+    }
+
+    // Helper method to create buttons
+    createButton(text, color, onClick) {
+        const button = document.createElement('button');
+        button.textContent = text;
+        button.style.cssText = `
+            flex: 1;
+            padding: 12px 16px;
+            background: ${color};
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        `;
+        
+        button.addEventListener('mouseenter', () => {
+            button.style.transform = 'translateY(-2px)';
+            button.style.boxShadow = '0 6px 12px rgba(0, 0, 0, 0.15)';
+        });
+        
+        button.addEventListener('mouseleave', () => {
+            button.style.transform = 'translateY(0)';
+            button.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+        });
+        
+        button.addEventListener('click', onClick);
+        
+        return button;
+    }
+
+    // Setup settings event listeners
+    setupSettingsEventListeners() {
+        // Custom prompt handling
+        const customPrompt = document.getElementById('customPrompt');
+        const previewText = document.getElementById('previewText');
+        
+        const updatePreview = () => {
+            const prompt = customPrompt.value;
+            this.customPrompt = prompt;
+            const preview = prompt.replace('$$$', 'Tom Cruise');
+            previewText.textContent = preview;
+        };
+        
+        customPrompt.addEventListener('input', updatePreview);
+        updatePreview(); // Initial preview
+
+        // Image upload handling
+        const imageUpload = document.getElementById('imageUpload');
+        const imageStatus = document.getElementById('imageStatus');
+        const viewImageBtn = document.getElementById('viewImageBtn');
+        
+        imageUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                // Validate file type
+                if (!file.type.startsWith('image/')) {
+                    this.showNotification('Please select an image file', 'error');
+                    return;
+                }
+                
+                // Validate file size (max 10MB)
+                if (file.size > 10 * 1024 * 1024) {
+                    this.showNotification('Image file must be less than 10MB', 'error');
+                    return;
+                }
+                
+                // Store file object directly
+                this.userImage = file;
+                
+                // Update status
+                this.updateImageStatus(file);
+                
+                // Update indicator
+                const indicator = document.getElementById('imageStatusIndicator');
+                if (indicator) {
+                    this.updateImageStatusIndicator(indicator);
+                }
+                
+                // Save as base64 for persistence
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    await this.saveToDB('settings', 'userImage', event.target.result);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        viewImageBtn.addEventListener('click', () => {
+            this.showUserImageDisplay();
+        });
+
+        // Homescreen upload handling
+        const homescreenUpload = document.getElementById('homescreenUpload');
+        homescreenUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    const imageData = event.target.result;
+                    const img = document.querySelector('.fullscreen-image');
+                    img.src = imageData;
+                    await this.saveToDB('homeScreenImage', 'image', imageData);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Debug toggle handling
+        const debugToggle = document.getElementById('debugToggle');
+        debugToggle.addEventListener('change', async (e) => {
+            this.debugMode = e.target.checked;
+            await this.saveToDB('settings', 'debugMode', this.debugMode);
+            this.toggleDebugOverlay(this.debugMode);
+        });
+    }
+
+    // Save settings
+    async saveSettings() {
+        try {
+            // Save custom prompt
+            await this.saveToDB('settings', 'customPrompt', this.customPrompt);
+            
+            this.showNotification('Settings saved successfully!', 'success');
+            this.closeSettingsModal();
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            this.showNotification('Error saving settings', 'error');
+        }
+    }
+
+    // Show notification
+    showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 16px 24px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 10000;
+            animation: slideIn 0.3s ease;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        `;
+        
+        switch(type) {
+            case 'success':
+                notification.style.background = '#10b981';
+                notification.style.color = 'white';
+                break;
+            case 'error':
+                notification.style.background = '#ef4444';
+                notification.style.color = 'white';
+                break;
+            default:
+                notification.style.background = '#3b82f6';
+                notification.style.color = 'white';
+        }
+        
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
     }
 
     // Toggle debug overlay visibility
